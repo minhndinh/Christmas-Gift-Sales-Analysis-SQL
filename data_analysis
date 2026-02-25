@@ -1,0 +1,202 @@
+/* -- Project: Xmas Gift Sales Analysis-- */ 
+/* -----------------------------------------------------------------------------------------------------------------
+1: Get sales information including revenue, quantity sold, cost, and profit for each Christmas season.
+select xmas_season, year,
+  ROUND(SUM(total_sales),2) AS revenue,
+  SUM(quantity) AS quantity,
+  ROUND(SUM(cost),2) AS cost,
+  ROUND(SUM(profit),2) AS profit
+from dbo.v_xmas_sales 
+group by xmas_season, year
+order by xmas_season, year
+/* -----------------------------------------------------------------------------------------------------------------
+2: Calculate the revenue growth percentage across each Christmas season
+with s as
+(select xmas_season, xmas_year,
+  ROUND(SUM(total_sales),2) AS revenue,
+  SUM(quantity) AS quantity,
+  ROUND(SUM(cost),2) AS cost,
+  ROUND(SUM(profit),2) AS profit
+from dbo.v_xmas_sales 
+group by xmas_year, xmas_season)
+select s.xmas_year,s.xmas_season, s.revenue, ROUND(((s.revenue-prev.revenue)/prev.revenue)*100,2) AS sale_growth_percentaeg
+from s
+JOIN s prev ON s.xmas_year= prev.xmas_year + 1
+/* -----------------------------------------------------------------------------------------------------------------
+3: Revenue and contribution percentage of each purchase channel (purchase_type) for each Christmas season
+with p as
+(select xmas_season, purchase_type, ROUND(SUM(total_sales),2) as revenue
+from dbo.v_xmas_sales 
+group by xmas_season, purchase_type)
+select xmas_season, purchase_type, revenue, ROUND((revenue/SUM(revenue) OVER (PARTITION BY xmas_season))*100,2) as revenue_ratio
+from p 
+/* -----------------------------------------------------------------------------------------------------------------
+4: Revenue statistics by country (and city).
+*/
+-- Revenue by country
+select country, ROUND(SUM(total_sales),2) as revenue
+from dbo.v_xmas_sales
+group by country
+order by revenue DESC
+-- Revenue by city
+select country,city, ROUND(SUM(total_sales),2) as revenue
+from dbo.v_xmas_sales
+group by country,city
+order by revenue DESC
+/* -----------------------------------------------------------------------------------------------------------------
+5: Rank countries by highest revenue (or highest revenue growth percentage) in the most recent Christmas season
+with s as
+(select xmas_season, xmas_year, country,
+  ROUND(SUM(total_sales),2) AS revenue,
+  SUM(quantity) AS quantity,
+  ROUND(SUM(cost),2) AS cost,
+  ROUND(SUM(profit),2) AS profit
+from dbo.v_xmas_sales 
+group by xmas_year, xmas_season,country)
+select s.xmas_year,s.xmas_season,s.country, s.revenue,prev.revenue as prev_revenue, ROUND(((s.revenue-prev.revenue)/prev.revenue)*100,2) AS revenue_growth_percentage
+from s
+JOIN s prev ON s.xmas_year= prev.xmas_year + 1
+ORDER by s.revenue DESC
+/* -----------------------------------------------------------------------------------------------------------------
+6: 
+Calculate revenue proportion by age group
+Calculate revenue proportion by gender
+Calculate revenue proportion by purchase type
+*/
+-- By age group
+SELECT 
+    customer_age_range,
+    ROUND(SUM(total_sales), 2) AS revenue,
+    ROUND((SUM(total_sales) / SUM(SUM(total_sales)) OVER ()) * 100, 2) AS revenue_ratio
+FROM dbo.v_xmas_sales
+GROUP BY customer_age_range
+ORDER BY revenue DESC
+
+-- By gender
+SELECT 
+    gender,
+    ROUND(SUM(total_sales), 2) AS revenue,
+    ROUND((SUM(total_sales) / SUM(SUM(total_sales)) OVER ()) * 100, 2) AS revenue_ratio
+FROM dbo.v_xmas_sales
+GROUP BY gender
+ORDER BY revenue DESC
+
+-- By purchase type
+SELECT 
+    purchase_type,
+    ROUND(SUM(total_sales), 2) AS revenue,
+    ROUND((SUM(total_sales) / SUM(SUM(total_sales)) OVER ()) * 100, 2) AS revenue_ratio
+FROM dbo.v_xmas_sales
+GROUP BY purchase_type
+ORDER BY revenue DESC
+
+/* -----------------------------------------------------------------------------------------------------------------
+7: 
+Calculate revenue proportion by purchase type for each age group
+Calculate revenue proportion by payment method for each age group
+*/
+-- Revenue proportion by purchase type for each age group
+WITH p AS (
+    SELECT 
+        customer_age_range,
+        purchase_type,
+        ROUND(SUM(total_sales), 2) AS revenue
+    FROM dbo.v_xmas_sales
+    GROUP BY customer_age_range, purchase_type
+)
+SELECT 
+    customer_age_range,
+    purchase_type,
+    revenue,
+    ROUND((revenue / SUM(revenue) OVER (PARTITION BY customer_age_range)) * 100, 2) AS revenue_ratio
+FROM p
+ORDER BY customer_age_range, revenue DESC
+
+-- Revenue proportion by payment method for each age group
+WITH p AS (
+    SELECT 
+        customer_age_range,
+        payment_method,
+        ROUND(SUM(total_sales), 2) AS revenue
+    FROM dbo.v_xmas_sales
+    GROUP BY customer_age_range, payment_method
+)
+SELECT 
+    customer_age_range,
+    payment_method,
+    revenue,
+    ROUND((revenue / SUM(revenue) OVER (PARTITION BY customer_age_range)) * 100, 2) AS revenue_ratio
+FROM p
+ORDER BY customer_age_range, revenue DESC
+
+/* -----------------------------------------------------------------------------------------------------------------
+8: Analyze sales information by product category (and product)
+*/
+-- Analysis by product category
+SELECT 
+    product_category,
+    ROUND(SUM(total_sales), 2)  AS revenue,
+    SUM(quantity)               AS quantity_sold,
+    ROUND(SUM(cost), 2)         AS cost,
+    ROUND(SUM(profit), 2)       AS profit,
+    ROUND((SUM(profit) / SUM(total_sales)) * 100, 2)   AS profit_margin_pct,
+    ROUND((SUM(total_sales) / SUM(SUM(total_sales)) OVER ()) * 100, 2)   AS revenue_ratio
+FROM dbo.v_xmas_sales
+GROUP BY product_category
+ORDER BY revenue DESC
+
+-- Analysis by product
+SELECT 
+    product_category,
+    product_name,
+    ROUND(SUM(total_sales), 2)  AS revenue,
+    SUM(quantity)               AS quantity_sold,
+    ROUND(SUM(cost), 2)         AS cost,
+    ROUND(SUM(profit), 2)       AS profit,
+    ROUND((SUM(profit) / SUM(total_sales)) * 100, 2)    AS profit_margin_pct,
+    ROUND((SUM(total_sales) / SUM(SUM(total_sales)) OVER (PARTITION BY product_category)) * 100, 2)   AS revenue_ratio_in_category
+FROM dbo.v_xmas_sales
+GROUP BY product_category, product_name
+ORDER BY product_category, revenue DESC
+
+/* -----------------------------------------------------------------------------------------------------------------
+9: 
+Which day of the week do male/female customers prefer to shop?
+What time of day do customers prefer to shop?
+*/
+-- Day of week preference by gender
+SELECT 
+    gender,
+    weekday,
+    weekday_name,
+    COUNT(*) AS transaction_count,
+    ROUND(SUM(total_sales), 2) AS revenue,
+    ROUND((SUM(total_sales) / SUM(SUM(total_sales)) OVER (PARTITION BY gender)) * 100, 2) AS revenue_ratio
+FROM dbo.v_xmas_sales
+GROUP BY gender, weekday, weekday_name
+ORDER BY gender, weekday
+
+-- Time of day preference (by hour bucket)
+SELECT 
+    CASE 
+        WHEN hour BETWEEN 6  AND 11 THEN '1. Morning (6h-11h)'
+        WHEN hour BETWEEN 12 AND 13 THEN '2. Noon (12h-13h)'
+        WHEN hour BETWEEN 14 AND 17 THEN '3. Afternoon (14h-17h)'
+        WHEN hour BETWEEN 18 AND 21 THEN '4. Evening (18h-21h)'
+        ELSE                              '5. Night (22h-5h)'
+    END AS time_of_day,
+    COUNT(*)                   AS transaction_count,
+    ROUND(SUM(total_sales), 2) AS revenue,
+    ROUND((SUM(total_sales) / SUM(SUM(total_sales)) OVER ()) * 100, 2) AS revenue_ratio
+FROM dbo.v_xmas_sales
+GROUP BY 
+    CASE 
+        WHEN hour BETWEEN 6  AND 11 THEN '1. Morning (6h-11h)'
+        WHEN hour BETWEEN 12 AND 13 THEN '2. Noon (12h-13h)'
+        WHEN hour BETWEEN 14 AND 17 THEN '3. Afternoon (14h-17h)'
+        WHEN hour BETWEEN 18 AND 21 THEN '4. Evening (18h-21h)'
+        ELSE                             '5. Night (22h-5h)'
+    END
+ORDER BY time_of_day
+
+
