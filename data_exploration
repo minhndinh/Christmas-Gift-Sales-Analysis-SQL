@@ -1,0 +1,160 @@
+/* -- Project: Xmas Gift Sales Analysis-- */ 
+
+/*Explore analysis dimensions
+- Time dimension
+- Sales location dimension
+- Customer dimension
+- Product dimension
+- Purchase type (purchase_type)
+- Payment method (payment_method)
+- Budget (xmas_budget)
+
+/* 1. Time dimension 
++ Christmas season, year, month
++ day of week
++ hour of day
+*/
+
+Select Min(YEAR(date)) AS min_year, Max(YEAR(date)) AS max_year
+From dbo.xmas_sales
+--year: 2018->2022
+
+Select YEAR(date) as year, eomonth(date) as end_date_of_month, COUNT(*) as nb_rows
+From dbo.xmas_sales
+Group by YEAR(date), eomonth(date)
+ORDER by year,end_date_of_month
+--months: 11,12,01
+
+SELECT CASE WHEN MONTH(end_date_of_month)=1
+ THEN CONCAT([YEAR]-1,'-',[YEAR])
+ ELSE CONCAT([YEAR],'-',[YEAR]+1)
+END as xmas_season, 
+ end_date_of_month, nb_rows
+From (Select YEAR(date) as year, eomonth(date) as end_date_of_month, COUNT(*) as nb_rows
+ From dbo.xmas_sales
+ Group by YEAR(date), eomonth(date)
+) m
+ORDER by xmas_season, end_date_of_month
+-- Note: Season 2017-2018 is incomplete (only has January 2018 data, missing Nov-Dec 2017)
+
+Select CASE weekday
+ WHEN 1 THEN 'Sunday'
+ WHEN 2 THEN 'Monday'
+ WHEN 3 THEN 'Tuesday'
+ WHEN 4 THEN 'Wednesday' 
+ WHEN 5 THEN 'Thursday'
+ WHEN 6 THEN 'Friday' 
+ WHEN 7 THEN 'Saturday'
+END AS weekday_name,nb_rows
+FROM(
+SELECT datepart(weekday,date) as weekday,Count(*) as nb_rows
+From dbo.xmas_sales
+GROUP BY datepart(weekday,date)
+) w
+ORDER BY weekday_name
+--day of week
+
+SELECT DATEPART(HOUR, time) AS hour, COUNT(*) AS nb_rows
+FROM dbo.xmas_sales
+GROUP BY DATEPART(HOUR, time)
+ORDER BY hour
+--hour of day
+
+/* 2. Sales location dimension
++ country, city
+*/
+
+SELECT * FROM dbo.country
+-- 10 countries
+
+SELECT country, city
+FROM dbo.xmas_sales
+GROUP BY country, city
+ORDER BY country, city
+-- 36 cities
+
+/* 3. Customer Dimension
++ Age Range (customer_age_range)
++ Gender (gender)
+*/
+
+Select distinct(customer_age_range) 
+from dbo.xmas_sales 
+-- Customer Age Range:
+1 to 11
+12 to 17
+18 and 
+
+SELECT DISTINCT(gender) 
+FROM dbo.xmas_sales 
+--gender
+
+/* 4. Product Dimension
++ Category, Product (product_category, product_name)
++ Product Type (product_type)
+*/
+
+select product_category, COUNT(product_name)as nb_product
+from dbo.xmas_sales 
+group by product_category
+order by product_category
+-- 13 Product Categories
+
+SELECT product_category, product_name
+FROM dbo.xmas_sales
+GROUP BY product_category, product_name
+ORDER BY product_category, product_name
+-- 18 Products
+
+/* 5. Others
++ (purchase_type)
++ (payment_method)
++ (xmas_budget)
+*/
+
+SELECT DISTINCT purchase_type FROM dbo.xmas_sales ORDER BY purchase_type
+--purchase_type:
+In-store
+Online
+Xmas Market
+
+SELECT DISTINCT payment_method FROM dbo.xmas_sales ORDER BY payment_method
+--payment_method:
+Cash
+Credit Card
+Debit Card
+Other
+PayPal
+
+SELECT DISTINCT xmas_budget FROM dbo.xmas_sales ORDER BY xmas_budget
+-- budget:
+High
+Low
+Medium
+
+/*6. Constructing a Time-Dimension View
+
+GO
+CREATE OR ALTER VIEW dbo.v_xmas_sales AS 
+SELECT 
+ CASE WHEN MONTH([date]) = 1 THEN YEAR([date]) - 1 ELSE YEAR([date]) END AS xmas_year,
+ CASE WHEN MONTH([date]) = 1 
+    THEN CONCAT(YEAR([date]) - 1, '-', YEAR([date]) ) 
+    ELSE CONCAT(YEAR([date]) , '-', YEAR([date]) + 1) 
+ END AS xmas_season, 
+ YEAR([date]) AS year, EOMONTH([date]) AS end_date_of_month,
+DATEPART(WEEKDAY, [date]) AS weekday, 
+CASE DATEPART(WEEKDAY, [date]) 
+ WHEN 1 THEN 'Sunday'
+ WHEN 2 THEN 'Monday'
+ WHEN 3 THEN 'Tuesday'
+ WHEN 4 THEN 'Wednesday' 
+ WHEN 5 THEN 'Thursday'
+ WHEN 6 THEN 'Friday' 
+ WHEN 7 THEN 'Saturday'
+END AS [weekday_name],
+DATEPART(HOUR, [time]) AS hour,
+s.*
+FROM dbo.xmas_sales s
+WHERE EOMONTH([date]) <> '2018-01-31'
+GO
